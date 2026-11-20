@@ -70,6 +70,8 @@
   .card .actions { display: flex; gap: 2px; }
   .icon { padding: 4px 7px; border: none; background: transparent; color: var(--muted); font-size: 15px; line-height: 1; }
   .icon:hover { background: var(--bg); color: var(--text); }
+  .card, .quad h3, .quad .hint, .y-label, .x-axis, .inbox h2 { -webkit-user-select: none; user-select: none; }
+  body.dragging, body.dragging * { -webkit-user-select: none !important; user-select: none !important; cursor: grabbing !important; }
   .sortable-ghost { opacity: .35; }
   .sortable-chosen { cursor: grabbing; }
 
@@ -231,6 +233,8 @@
       group: 'tasks', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 3,
       filter: '.icon, .empty', preventOnFilter: false,
       delay: 120, delayOnTouchOnly: true, touchStartThreshold: 4,
+      onChoose: function () { document.body.classList.add('dragging'); var s = window.getSelection(); if (s) s.removeAllRanges(); },
+      onUnchoose: function () { document.body.classList.remove('dragging'); },
       onEnd: syncFromDom
     });
   });
