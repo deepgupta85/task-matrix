@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Matrix</title>
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6a66; --border: #dcdad3;
+    --accent: #2f5bea;
+    --q-hh: #fde8e4; --q-hh-b: #e8a398;
+    --q-lh: #fff1d6; --q-lh-b: #e6c274;
+    --q-hl: #e3eefc; --q-hl-b: #93b6e6;
+    --q-ll: #ecebe6; --q-ll-b: #c3c1b8;
+    --shadow: 0 1px 2px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151514; --surface: #232321; --text: #ecebe6; --muted: #a09f98; --border: #3a3935;
+      --accent: #7c9bff;
+      --q-hh: #3a2420; --q-hh-b: #7a4036;
+      --q-lh: #38301a; --q-lh-b: #7a6428;
+      --q-hl: #1d2a3d; --q-hl-b: #3c5f93;
+      --q-ll: #2a2a27; --q-ll-b: #4a4943;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  .date { color: var(--muted); font-size: 14px; }
+
+  form.add { display: flex; gap: 8px; margin-bottom: 20px; }
+  form.add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); padding: 8px 12px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  .count { font-weight: 400; }
+
+  .inbox { background: var(--surface); border: 1px dashed var(--border); border-radius: 12px; padding: 12px; margin-bottom: 20px; }
+  .inbox .list { min-height: 52px; }
+
+  /* Matrix */
+  .matrix-wrap { display: grid; grid-template-columns: 28px 1fr; gap: 8px; }
+  .y-label { writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; color: var(--muted);
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em; display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+  .x-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px;
+    text-transform: uppercase; letter-spacing: .08em; padding: 6px 4px 0; grid-column: 2; }
+  .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .quad { border: 1.5px solid; border-radius: 12px; padding: 10px; min-height: 190px; display: flex; flex-direction: column; }
+  .quad h3 { margin: 0 0 2px; font-size: 15px; }
+  .quad .hint { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+  .quad .list { flex: 1; min-height: 80px; }
+  .quad[data-q="hh"] { background: var(--q-hh); border-color: var(--q-hh-b); }
+  .quad[data-q="hl"] { background: var(--q-hl); border-color: var(--q-hl-b); }
+  .quad[data-q="lh"] { background: var(--q-lh); border-color: var(--q-lh-b); }
+  .quad[data-q="ll"] { background: var(--q-ll); border-color: var(--q-ll-b); }
+
+  .list { display: flex; flex-direction: column; gap: 6px; }
+  .card { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 8px 8px 10px; box-shadow: var(--shadow); cursor: grab; touch-action: manipulation; }
+  .card .t { flex: 1; word-break: break-word; }
+  .card .actions { display: flex; gap: 2px; }
+  .icon { padding: 4px 7px; border: none; background: transparent; color: var(--muted); font-size: 15px; line-height: 1; }
+  .icon:hover { background: var(--bg); color: var(--text); }
+  .sortable-ghost { opacity: .35; }
+  .sortable-chosen { cursor: grabbing; }
+
+  .archive { margin-top: 28px; }
+  .archive summary { cursor: pointer; font-weight: 600; margin-bottom: 8px; }
+  .archive .card { cursor: default; }
+  .archive .t { text-decoration: line-through; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  footer button { font-size: 12px; padding: 4px 10px; }
+
+  @media (max-width: 640px) {
+    .matrix-wrap { grid-template-columns: 1fr; }
+    .y-label { display: none; }
+    .x-axis { grid-column: 1; }
+    .matrix { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Task Matrix</h1>
+    <span class="date" id="date"></span>
+  </header>
+
+  <form class="add" id="addForm">
+    <input id="newTask" type="text" placeholder="Add a task and press Enter…" aria-label="New task" autocomplete="off" maxlength="200" required>
+    <button class="primary" type="submit">Add</button>
+  </form>
+
+  <section class="inbox">
+    <h2>Inbox — drag tasks into the matrix <span class="count" id="inboxCount"></span></h2>
+    <div class="list" id="list-inbox" data-q="inbox"></div>
+  </section>
+
+  <div class="matrix-wrap">
+    <div class="y-label"><span>Low</span><span>Importance →</span><span>High</span></div>
+    <div class="matrix">
+      <div class="quad" data-q="hl"><h3>Schedule</h3><p class="hint">High importance · Low critical</p><div class="list" id="list-hl" data-q="hl"></div></div>
+      <div class="quad" data-q="hh"><h3>Do now</h3><p class="hint">High importance · High critical</p><div class="list" id="list-hh" data-q="hh"></div></div>
+      <div class="quad" data-q="ll"><h3>Maybe later</h3><p class="hint">Low importance · Low critical</p><div class="list" id="list-ll" data-q="ll"></div></div>
+      <div class="quad" data-q="lh"><h3>Quick / delegate</h3><p class="hint">Low importance · High critical</p><div class="list" id="list-lh" data-q="lh"></div></div>
+    </div>
+    <div class="x-axis"><span>Low</span><span>Critical →</span><span>High</span></div>
+  </div>
+
+  <details class="archive" id="archive">
+    <summary>Archive <span class="count" id="archiveCount"></span></summary>
+    <div class="list" id="archiveList"></div>
+  </details>
+
+  <footer>
+    <span>Saved in this browser only.</span>
+    <button type="button" id="exportBtn">Export</button>
+    <button type="button" id="importBtn">Import</button>
+    <input type="file" id="importFile" accept="application/json" hidden>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script>
+(function () {
+  var KEY = 'task-matrix-v1';
+  var QUADS = ['inbox', 'hh', 'hl', 'lh', 'll'];
+  var tasks = load();
+
+  function load() {
+    try { var d = JSON.parse(localStorage.getItem(KEY)); if (Array.isArray(d)) return d; } catch (e) {}
+    return [];
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(tasks)); } catch (e) {} }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function $(id) { return document.getElementById(id); }
+
+  $('date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  function card(t, archived) {
+    var el = document.createElement('div');
+    el.className = 'card';
+    el.dataset.id = t.id;
+    var span = document.createElement('span');
+    span.className = 't';
+    span.textContent = t.title;
+    var act = document.createElement('div');
+    act.className = 'actions';
+    if (archived) {
+      act.appendChild(btn('↩', 'Restore', function () { t.archived = false; t.quad = 'inbox'; commit(); }));
+    } else {
+      act.appendChild(btn('✓', 'Archive', function () { t.archived = true; commit(); }));
+    }
+    act.appendChild(btn('✕', 'Delete', function () {
+      if (confirm('Delete "' + t.title + '" permanently?')) { tasks = tasks.filter(function (x) { return x !== t; }); commit(); }
+    }));
+    el.appendChild(span); el.appendChild(act);
+    return el;
+  }
+  function btn(label, title, fn) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'icon'; b.textContent = label; b.title = title; b.setAttribute('aria-label', title);
+    b.addEventListener('click', fn);
+    return b;
+  }
+
+  function render() {
+    QUADS.forEach(function (q) {
+      var list = $('list-' + q);
+      list.innerHTML = '';
+      var items = tasks.filter(function (t) { return !t.archived && t.quad === q; });
+      items.forEach(function (t) { list.appendChild(card(t, false)); });
+      if (!items.length && q === 'inbox') {
+        var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Nothing waiting. Add a task above.'; e.dataset.empty = '1'; list.appendChild(e);
+      }
+    });
+    var arch = tasks.filter(function (t) { return t.archived; });
+    var al = $('archiveList'); al.innerHTML = '';
+    arch.forEach(function (t) { al.appendChild(card(t, true)); });
+    if (!arch.length) { var e2 = document.createElement('div'); e2.className = 'empty'; e2.textContent = 'No archived tasks.'; al.appendChild(e2); }
+    var inboxN = tasks.filter(function (t) { return !t.archived && t.quad === 'inbox'; }).length;
+    $('inboxCount').textContent = inboxN ? '(' + inboxN + ')' : '';
+    $('archiveCount').textContent = arch.length ? '(' + arch.length + ')' : '';
+  }
+  function commit() { save(); render(); }
+
+  // Rebuild order + quadrant from the DOM after a drag
+  function syncFromDom() {
+    var order = [];
+    QUADS.forEach(function (q) {
+      $('list-' + q).querySelectorAll('.card').forEach(function (c) {
+        var t = tasks.find(function (x) { return x.id === c.dataset.id; });
+        if (t) { t.quad = q; order.push(t); }
+      });
+    });
+    var rest = tasks.filter(function (t) { return order.indexOf(t) < 0; });
+    tasks = order.concat(rest);
+    commit();
+  }
+
+  QUADS.forEach(function (q) {
+    if (!window.Sortable) return;
+    Sortable.create($('list-' + q), {
+      group: 'tasks', animation: 150, ghostClass: 'sortable-ghost', forceFallback: true, fallbackTolerance: 3,
+      filter: '.icon, .empty', preventOnFilter: false,
+      delay: 120, delayOnTouchOnly: true, touchStartThreshold: 4,
+      onEnd: syncFromDom
+    });
+  });
+
+  $('addForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = $('newTask').value.trim();
+    if (!v) return;
+    tasks.unshift({ id: uid(), title: v, quad: 'inbox', archived: false, created: Date.now() });
+    $('newTask').value = '';
+    commit();
+  });
+
+  $('exportBtn').addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(tasks, null, 2)], { type: 'application/json' }));
+    a.download = 'task-matrix-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+  $('importBtn').addEventListener('click', function () { $('importFile').click(); });
+  $('importFile').addEventListener('change', function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var d = JSON.parse(r.result);
+        if (!Array.isArray(d)) throw 0;
+        if (!confirm('Replace current tasks with ' + d.length + ' imported tasks?')) return;
+        tasks = d.filter(function (t) { return t && t.title; }).map(function (t) {
+          return { id: t.id || uid(), title: String(t.title), quad: QUADS.indexOf(t.quad) >= 0 ? t.quad : 'inbox', archived: !!t.archived, created: t.created || Date.now() };
+        });
+        commit();
+      } catch (err) { alert('That file is not a valid task export.'); }
+    };
+    r.readAsText(f); e.target.value = '';
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
