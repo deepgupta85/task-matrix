@@ -36,6 +36,19 @@
   form.add { display: flex; gap: 8px; margin-bottom: 20px; }
   form.add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--text);
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  form.add input[type=date] { flex: none; width: 150px; }
+  .body { flex: 1; min-width: 0; }
+  .body .t { display: block; }
+  .due { display: inline-block; margin-top: 3px; font-size: 12px; padding: 1px 8px; border-radius: 99px;
+    border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
+  .due.none { border-style: dashed; opacity: .6; }
+  .due.soon { color: #8a5a00; border-color: #e6c274; background: #fff1d6; }
+  .due.over { color: #a3281a; border-color: #e8a398; background: #fde8e4; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .due.soon { color: #f0c870; background: #38301a; border-color: #7a6428; }
+    :root:not([data-theme="light"]) .due.over { color: #f3a99d; background: #3a2420; border-color: #7a4036; }
+  }
+  .archive .due { cursor: default; text-decoration: none; }
   button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border);
     background: var(--surface); color: var(--text); padding: 8px 12px; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
@@ -100,6 +113,7 @@
 
   <form class="add" id="addForm">
     <input id="newTask" type="text" placeholder="Add a task and press Enter…" aria-label="New task" autocomplete="off" maxlength="200" required>
+    <input id="newDue" type="date" aria-label="Due date (optional)" title="Due date (optional)">
     <button class="primary" type="submit">Add</button>
   </form>
 
@@ -183,8 +197,41 @@
     act.appendChild(btn('✕', 'Delete', function () {
       if (confirm('Delete "' + t.title + '" permanently?')) { t.deleted = true; t.updated = Date.now(); commit(); }
     }));
-    el.appendChild(span); el.appendChild(act);
+    var body = document.createElement('div');
+    body.className = 'body';
+    body.appendChild(span);
+    if (t.due || !archived) body.appendChild(dueBadge(t, archived));
+    el.appendChild(body); el.appendChild(act);
     return el;
+  }
+  function parseDue(s) { var p = String(s).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function dueBadge(t, archived) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    var cls = 'due', txt;
+    if (!t.due) { cls += ' none'; txt = '+ due date'; }
+    else {
+      var d = parseDue(t.due), now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var diff = Math.round((d - today) / 86400000);
+      var fmt = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      if (diff < 0) { cls += ' over'; txt = 'Overdue · ' + fmt; }
+      else if (diff === 0) { cls += ' soon'; txt = 'Due today'; }
+      else if (diff === 1) { cls += ' soon'; txt = 'Due tomorrow'; }
+      else txt = 'Due ' + fmt;
+    }
+    b.className = cls; b.textContent = txt;
+    b.title = archived ? '' : 'Change due date';
+    if (archived) { b.disabled = true; return b; }
+    b.addEventListener('click', function () {
+      var i = document.createElement('input');
+      i.type = 'date'; i.value = t.due || '';
+      i.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:1px;height:1px';
+      b.parentNode.appendChild(i);
+      i.addEventListener('change', function () { t.due = i.value || null; t.updated = Date.now(); commit(); });
+      i.addEventListener('blur', function () { setTimeout(function () { if (i.parentNode) i.parentNode.removeChild(i); }, 200); });
+      try { i.showPicker(); } catch (e) { i.focus(); i.click(); }
+    });
+    return b;
   }
   function btn(label, title, fn) {
     var b = document.createElement('button');
@@ -243,8 +290,8 @@
     e.preventDefault();
     var v = $('newTask').value.trim();
     if (!v) return;
-    tasks.unshift({ id: uid(), title: v, quad: 'inbox', archived: false, created: Date.now(), updated: Date.now() });
-    $('newTask').value = '';
+    tasks.unshift({ id: uid(), title: v, quad: 'inbox', archived: false, created: Date.now(), updated: Date.now(), due: $('newDue').value || null });
+    $('newTask').value = ''; $('newDue').value = '';
     commit();
   });
 
@@ -264,7 +311,7 @@
         if (!Array.isArray(d)) throw 0;
         if (!confirm('Replace current tasks with ' + d.length + ' imported tasks?')) return;
         tasks = d.filter(function (t) { return t && t.title; }).map(function (t) {
-          return { id: t.id || uid(), title: String(t.title), quad: QUADS.indexOf(t.quad) >= 0 ? t.quad : 'inbox', archived: !!t.archived, created: t.created || Date.now(), updated: Date.now() };
+          return { id: t.id || uid(), title: String(t.title), quad: QUADS.indexOf(t.quad) >= 0 ? t.quad : 'inbox', archived: !!t.archived, created: t.created || Date.now(), updated: Date.now(), due: /^\d{4}-\d{2}-\d{2}$/.test(t.due || '') ? t.due : null };
         });
         commit();
       } catch (err) { alert('That file is not a valid task export.'); }
