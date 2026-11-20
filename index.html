@@ -37,8 +37,9 @@
   form.add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--text);
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
   form.add input[type=date] { flex: none; width: 150px; }
-  .body { flex: 1; min-width: 0; }
-  .body .t { display: block; }
+  .body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; position: relative; }
+  .body .t { flex: 1; min-width: 0; }
+  .body .due { flex: none; margin: 0; white-space: nowrap; }
   .due { display: inline-block; margin-top: 3px; font-size: 12px; padding: 1px 8px; border-radius: 99px;
     border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
   .due.none { border-style: dashed; opacity: .6; }
@@ -225,7 +226,7 @@
     b.addEventListener('click', function () {
       var i = document.createElement('input');
       i.type = 'date'; i.value = t.due || '';
-      i.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:1px;height:1px';
+      i.style.cssText = 'position:absolute;right:0;top:100%;opacity:0;pointer-events:none;width:1px;height:1px';
       b.parentNode.appendChild(i);
       i.addEventListener('change', function () { t.due = i.value || null; t.updated = Date.now(); commit(); });
       i.addEventListener('blur', function () { setTimeout(function () { if (i.parentNode) i.parentNode.removeChild(i); }, 200); });
