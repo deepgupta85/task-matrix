@@ -33,6 +33,19 @@
   h1 { font-size: 22px; margin: 0; }
   .date { color: var(--muted); font-size: 14px; }
 
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    background: #fff1d6; color: #5c3d00; border: 1px solid #e6c274; border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; font-size: 14px; }
+  .banner[hidden] { display: none; }
+  .banner.err { background: #fde8e4; color: #7a1f14; border-color: #e8a398; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .banner { background: #38301a; color: #f0c870; border-color: #7a6428; }
+    :root:not([data-theme="light"]) .banner.err { background: #3a2420; color: #f3a99d; border-color: #7a4036; }
+  }
+  dialog { max-width: 460px; width: calc(100% - 32px); border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); padding: 18px; }
+  dialog ol { padding-left: 20px; margin: 8px 0; font-size: 13px; color: var(--muted); }
+  dialog a { color: var(--accent); }
+  #syncMsg { font-size: 13px; margin: 10px 0 0; min-height: 1em; }
+  #syncMsg.err { color: #c0392b; } #syncMsg.ok { color: #2e7d32; }
   form.add { display: flex; gap: 8px; margin-bottom: 20px; }
   form.add input { flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--text);
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
@@ -112,6 +125,11 @@
     <span class="date" id="date"></span>
   </header>
 
+  <div class="banner" id="syncBanner" hidden>
+    <span id="bannerText"></span>
+    <button type="button" id="bannerBtn">Set up sync</button>
+  </div>
+
   <form class="add" id="addForm">
     <input id="newTask" type="text" placeholder="Add a task and press Enter…" aria-label="New task" autocomplete="off" maxlength="200" required>
     <input id="newDue" type="date" aria-label="Due date (optional)" title="Due date (optional)">
@@ -151,11 +169,18 @@
 <dialog id="syncDlg">
   <form method="dialog" id="syncForm">
     <h2 style="margin-top:0">Sync across devices</h2>
-    <p class="hint" style="font-size:13px;color:var(--muted)">Tasks are stored in a private GitHub repo. Paste a fine-grained token with <b>Contents: read &amp; write</b> on that one repo. It stays in this browser only.</p>
+    <p style="font-size:13px;color:var(--muted);margin:0">Tasks are stored in a private GitHub repo so every device shows the same list. Do this once on <b>each</b> device (laptop first, so your existing tasks upload).</p>
+    <ol>
+      <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a fine-grained token</a></li>
+      <li>Repository access: <b>Only select repositories</b> → <code>task-matrix-data</code></li>
+      <li>Permissions → Repository → <b>Contents: Read and write</b></li>
+      <li>Generate, copy, paste below. It stays in this browser only.</li>
+    </ol>
     <label style="display:block;font-size:13px;margin:8px 0 2px">Repository (owner/name)</label>
     <input id="syncRepo" type="text" placeholder="owner/task-matrix-data" autocomplete="off" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
     <label style="display:block;font-size:13px;margin:8px 0 2px">Token</label>
     <input id="syncToken" type="password" placeholder="github_pat_…" autocomplete="off" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+    <p id="syncMsg" role="status"></p>
     <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
       <button type="button" id="syncOff">Turn off</button>
       <button type="button" id="syncCancel">Cancel</button>
@@ -325,7 +350,25 @@
   var cfg = (function () { try { return JSON.parse(localStorage.getItem(SKEY)) || {}; } catch (e) { return {}; } })();
   var sha = null, lastRemote = null, timer = null, busy = false, again = false;
 
-  function status(msg) { $('syncStatus').textContent = msg; }
+  var lastErr = null;
+  function status(msg) { $('syncStatus').textContent = msg; updateBanner(); }
+  function updateBanner() {
+    var b = $('syncBanner');
+    if (!cfg.token) {
+      b.hidden = false; b.classList.remove('err');
+      $('bannerText').textContent = 'Sync is off — your tasks are only on this device.';
+      $('bannerBtn').textContent = 'Set up sync';
+    } else if (lastErr) {
+      b.hidden = false; b.classList.add('err');
+      $('bannerText').textContent = 'Sync problem: ' + lastErr + '. Changes are saved on this device only.';
+      $('bannerBtn').textContent = 'Fix sync';
+    } else { b.hidden = true; }
+  }
+  function openSync() {
+    $('syncRepo').value = cfg.repo || 'deepgupta85/task-matrix-data'; $('syncToken').value = cfg.token || '';
+    $('syncMsg').textContent = ''; $('syncMsg').className = '';
+    dlg.showModal();
+  }
   function enc(str) { return btoa(unescape(encodeURIComponent(str))); }
   function dec(b64) { return decodeURIComponent(escape(atob(b64.replace(/\s/g, '')))); }
   function api(method, body) {
@@ -364,31 +407,45 @@
         if (!r.ok) throw new Error('Save failed (' + r.status + ')');
         return r.json().then(function (j) { sha = j.content.sha; lastRemote = out; });
       });
-    }).then(function () { status('Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); })
-      .catch(function (e) { status('Sync problem: ' + (e.message || 'offline') + ' (saved locally)'); })
+    }).then(function () { lastErr = null; status('Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); })
+      .catch(function (e) {
+        lastErr = (e && e.message === 'Failed to fetch') ? 'cannot reach GitHub (offline?)' : (e.message || 'unknown error');
+        status('Sync problem: ' + lastErr + ' (saved locally)');
+      })
       .then(function () { busy = false; if (again) { again = false; scheduleSync(); } });
   }
   function scheduleSync() { if (!cfg.token) return; clearTimeout(timer); timer = setTimeout(syncNow, 800); }
 
   var dlg = $('syncDlg');
-  $('syncBtn').addEventListener('click', function () {
-    $('syncRepo').value = cfg.repo || ''; $('syncToken').value = cfg.token || '';
-    dlg.showModal();
-  });
+  $('syncBtn').addEventListener('click', openSync);
+  $('bannerBtn').addEventListener('click', openSync);
   $('syncCancel').addEventListener('click', function () { dlg.close(); });
   $('syncOff').addEventListener('click', function () {
     cfg = {}; try { localStorage.removeItem(SKEY); } catch (e) {}
     status('Saved in this browser only.'); dlg.close();
   });
-  $('syncForm').addEventListener('submit', function () {
-    cfg = { repo: $('syncRepo').value.trim(), token: $('syncToken').value.trim() };
-    try { localStorage.setItem(SKEY, JSON.stringify(cfg)); } catch (e) {}
-    sha = null; lastRemote = null; syncNow();
+  $('syncForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var repo = $('syncRepo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '');
+    var token = $('syncToken').value.trim();
+    var msg = $('syncMsg');
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token) { msg.className = 'err'; msg.textContent = 'Enter the repository (owner/name) and the token.'; return; }
+    var prevCfg = cfg;
+    cfg = { repo: repo, token: token };
+    sha = null; lastRemote = null; lastErr = null; busy = false;
+    msg.className = ''; msg.textContent = 'Connecting…';
+    syncNow().then(function () {
+      if (lastErr) { msg.className = 'err'; msg.textContent = 'Failed: ' + lastErr + '. Check the token has Contents: Read and write on this repo.'; cfg = prevCfg; updateBanner(); return; }
+      try { localStorage.setItem(SKEY, JSON.stringify(cfg)); } catch (x) {}
+      msg.className = 'ok'; msg.textContent = 'Connected. ' + tasks.filter(function (t) { return !t.deleted; }).length + ' tasks synced.';
+      setTimeout(function () { dlg.close(); }, 900);
+    });
   });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) syncNow(); });
   setInterval(function () { if (!document.hidden) syncNow(); }, 30000);
 
   render();
+  updateBanner();
   syncNow();
 })();
 </script>
