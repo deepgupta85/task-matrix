@@ -28,7 +28,20 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+  .today { position: sticky; top: 16px; background: var(--surface); border: 2px solid var(--accent); border-radius: 14px; padding: 14px; }
+  .today-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .today-head h2 { color: var(--accent); margin: 0; font-size: 14px; }
+  .today-count { font-size: 13px; font-weight: 700; color: var(--accent); }
+  .today-count.over { color: #c0392b; }
+  .today-date { font-size: 20px; font-weight: 700; margin: 4px 0 2px; }
+  .today-sub { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .today .list { min-height: 120px; padding: 6px; border-radius: 10px; background: var(--bg); }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .today { position: static; order: -1; }
+  }
   header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   h1 { font-size: 22px; margin: 0; }
   .date { color: var(--muted); font-size: 14px; }
@@ -122,7 +135,6 @@
 <div class="wrap">
   <header>
     <h1>Task Matrix</h1>
-    <span class="date" id="date"></span>
   </header>
 
   <div class="banner" id="syncBanner" hidden>
@@ -136,6 +148,8 @@
     <button class="primary" type="submit">Add</button>
   </form>
 
+  <div class="layout">
+  <div class="main">
   <section class="inbox">
     <h2>Inbox — drag tasks into the matrix <span class="count" id="inboxCount"></span></h2>
     <div class="list" id="list-inbox" data-q="inbox"></div>
@@ -150,6 +164,17 @@
       <div class="quad" data-q="lh"><h3>Quick / delegate</h3><p class="hint">Low importance · High critical</p><div class="list" id="list-lh" data-q="lh"></div></div>
     </div>
     <div class="x-axis"><span>Low</span><span>Critical →</span><span>High</span></div>
+  </div>
+  </div>
+
+  <aside class="today" id="todayBox" data-q="today">
+    <div class="today-head">
+      <h2>Must do today</h2>
+      <span class="today-count" id="todayCount"></span>
+    </div>
+    <div class="today-date" id="todayDate"></div>
+    <div class="list" id="list-today" data-q="today"></div>
+  </aside>
   </div>
 
   <details class="archive" id="archive">
@@ -189,11 +214,12 @@
   </form>
 </dialog>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script src="sortable.min.js"></script>
 <script>
 (function () {
   var KEY = 'task-matrix-v1';
-  var QUADS = ['inbox', 'hh', 'hl', 'lh', 'll'];
+  var QUADS = ['inbox', 'today', 'hh', 'hl', 'lh', 'll'];
+  var TODAY_TARGET = 3;
   var tasks = load();
 
   function load() {
@@ -204,7 +230,8 @@
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function $(id) { return document.getElementById(id); }
 
-  $('date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  function showDate() { $('todayDate').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }); }
+  showDate();
 
   function card(t, archived) {
     var el = document.createElement('div');
@@ -272,10 +299,17 @@
       list.innerHTML = '';
       var items = tasks.filter(function (t) { return !t.deleted && !t.archived && t.quad === q; });
       items.forEach(function (t) { list.appendChild(card(t, false)); });
-      if (!items.length && q === 'inbox') {
-        var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Nothing waiting. Add a task above.'; e.dataset.empty = '1'; list.appendChild(e);
+      var hint = q === 'inbox' ? 'Nothing waiting. Add a task above.' : q === 'today' ? 'Drag your must-do tasks here.' : null;
+      if (!items.length && hint) {
+        var e = document.createElement('div'); e.className = 'empty'; e.textContent = hint; e.dataset.empty = '1'; list.appendChild(e);
+      }
+      if (q === 'today') {
+        var c = $('todayCount');
+        c.textContent = items.length + ' of ' + TODAY_TARGET;
+        c.classList.toggle('over', items.length > TODAY_TARGET);
       }
     });
+    showDate();
     var arch = tasks.filter(function (t) { return !t.deleted && t.archived; });
     var al = $('archiveList'); al.innerHTML = '';
     arch.forEach(function (t) { al.appendChild(card(t, true)); });
