@@ -71,6 +71,10 @@
   .due.none { border-style: dashed; opacity: .6; }
   .due.soon { color: #8a5a00; border-color: #e6c274; background: #fff1d6; }
   .due.over { color: #a3281a; border-color: #e8a398; background: #fde8e4; }
+  .due.later { color: #1e6b34; border-color: #8fcba0; background: #e2f5e8; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .due.later { color: #8fdca4; background: #1b3324; border-color: #3f7a53; }
+  }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .due.soon { color: #f0c870; background: #38301a; border-color: #7a6428; }
     :root:not([data-theme="light"]) .due.over { color: #f3a99d; background: #3a2420; border-color: #7a4036; }
@@ -268,9 +272,9 @@
       var diff = Math.round((d - today) / 86400000);
       var fmt = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       if (diff < 0) { cls += ' over'; txt = 'Overdue · ' + fmt; }
-      else if (diff === 0) { cls += ' soon'; txt = 'Due today'; }
+      else if (diff === 0) { cls += ' over'; txt = 'Due today'; }
       else if (diff === 1) { cls += ' soon'; txt = 'Due tomorrow'; }
-      else txt = 'Due ' + fmt;
+      else { cls += ' later'; txt = 'Due ' + fmt; }
     }
     b.className = cls; b.textContent = txt;
     b.title = archived ? '' : 'Change due date';
